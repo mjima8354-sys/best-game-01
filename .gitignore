@@ -1,0 +1,7 @@
+gemini-run*.log
+gemini-instr*.md
+out/
+out2/
+serve.log
+kit/
+cdp-shots.mjs

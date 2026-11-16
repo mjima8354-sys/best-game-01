@@ -1,61 +1,72 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
+// Game configuration and tuning constants for STARWAKE — Comet Courier.
 
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
+export const FIELD = { width: 1280, height: 720 };
 
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
 export const STEP = 1 / 60;
 
 export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
+  radius: 16,
+  thrust: 520,
+  drag: 0.982,
+  maxSpeed: 600,
+  dashSpeed: 1100,
+  dashDuration: 0.18,
+  dashCooldown: 1.2,
+  invulnerableTime: 1.5,
+  maxShields: 3,
 };
 
-export const LIVES = 3;
-
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
+export const WELL = {
+  radius: 65,
+  gravConstant: 280000,
+  pullRadius: 320,
 };
 
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
+export const SHARD = {
+  radius: 12,
+  value: 100,
+  quotaBase: 4,
+  quotaPerWave: 2,
 };
 
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
+export const ASTEROID = {
+  radiusMin: 18,
+  radiusMax: 42,
+  speedMin: 80,
+  speedMax: 220,
+  spawnInterval: 2.2,
+  spawnIntervalScale: 0.85,
+};
 
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
+export const BEACON = {
+  x: 640,
+  y: 360,
+  radius: 40,
+};
 
 export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
+  backdrop: '#06070a',
+  starDim: 'rgba(255, 255, 255, 0.3)',
+  starBright: 'rgba(200, 230, 255, 0.8)',
+  player: '#00f0ff',
+  playerTrail: 'rgba(0, 240, 255, 0.4)',
+  dashGlow: '#ffffff',
+  wellCore: '#ff00aa',
+  wellGlow: 'rgba(255, 0, 170, 0.15)',
+  wellRing: '#ff55cc',
+  shard: '#ffd700',
+  shardGlow: 'rgba(255, 215, 0, 0.6)',
+  asteroid: '#ff3355',
+  asteroidTrail: 'rgba(255, 51, 85, 0.25)',
+  beacon: '#00ffaa',
+  beaconGlow: 'rgba(0, 255, 170, 0.3)',
+  panel: '#10131d',
+  panelBorder: '#28324c',
+  text: '#eef2f7',
+  muted: '#8a99b5',
+  accent: '#00f0ff',
 };
 
 export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';
+export const BEST_KEY = 'starwake-courier.best';

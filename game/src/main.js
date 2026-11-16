@@ -1,23 +1,19 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
-//
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { stageShot } from './shots.js';
+// Main entry point and game loop for STARWAKE — Comet Courier.
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
+import { BEST_KEY, STEP } from './config.js';
+import { createRandom } from './random.js';
+import { createWorld, EVENT_DELIVER, EVENT_DASH, EVENT_HIT, EVENT_OVER, EVENT_SHARD, EVENT_WAVE_CLEAR } from './world.js';
+import { ACTION_CONFIRM, ACTION_DASH, ACTION_MUTE, ACTION_PAUSE, ACTION_RESTART, createInput } from './input.js';
+import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE, SCREEN_WAVE_INTRO } from './render.js';
+import { stageShot } from './shots.js';
+import { playDash, playDeliver, playHit, playShard, playUi, setThrust, toggleMute, unlockAudio } from './audio.js';
+
 const MAX_FRAME = 0.25;
 
 const params = new URLSearchParams(window.location.search);
 const shot = params.get('shot');
 const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
+const seed = Number.isInteger(seedParam) ? seedParam : 1;
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
@@ -35,21 +31,16 @@ function readBest() {
 function saveBest(value) {
   try {
     window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
-  }
+  } catch {}
 }
 
 function runShot(name) {
   const scene = stageShot(name, world);
-  let painted = 0;
-  function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
+  // Paint synchronously (twice, like two frames) so a headless capture of a fixed
+  // seed always sees the finished frame, even when requestAnimationFrame is throttled.
+  renderer.draw(world.state, scene.screen, scene.best);
+  renderer.draw(world.state, scene.screen, scene.best);
+  window.__shotReady = true;
 }
 
 function runGame() {
@@ -59,74 +50,109 @@ function runGame() {
   let accumulator = 0;
   let last = performance.now();
 
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
+  function announce(msg) {
+    status.textContent = msg;
   }
 
   function startGame() {
+    unlockAudio();
     world.reset();
     accumulator = 0;
     screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
+    playUi();
+    announce('Game started. Pilot your courier ship, collect stardust near gravity wells, and deliver to the beacon.');
   }
 
   function endGame() {
     screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
+    playHit();
+    if (world.state.player.score > best) {
+      best = world.state.player.score;
       saveBest(best);
     }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
+    announce(`Game over. Final score ${world.state.player.score}. Best ${best}.`);
   }
 
   function handleActions() {
     const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
+    if (actions) unlockAudio();
+
+    if (actions & ACTION_MUTE) {
+      toggleMute();
+    }
+    if (actions & ACTION_RESTART) {
+      startGame();
+    }
+    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) {
+      startGame();
+    } else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
+      setThrust(false);
+      playUi();
       announce('Paused.');
     } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
       screen = SCREEN_PLAY;
-      announce('Playing.');
+      playUi();
+      announce('Resumed.');
     }
   }
 
   function step() {
     if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
+      world.step(STEP, { thrust: false, brake: false, turnLeft: false, turnRight: false, dash: false, mouse: { x: 0, y: 0 } }, true);
       return;
     }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
+    if (screen !== SCREEN_PLAY) return;
+
+    const controls = input.getControls();
+    setThrust(controls.thrust);
+
+    const events = world.step(STEP, controls, false);
+    if (events & EVENT_OVER) {
+      setThrust(false);
+      endGame();
+    } else {
+      if (events & EVENT_SHARD) { playShard(); announce('Stardust shard collected.'); }
+      if (events & EVENT_DELIVER) { playDeliver(); announce('Stardust delivered to beacon! Wave cleared.'); }
+      if (events & EVENT_HIT) { playHit(); announce('Shield impact detected!'); }
+      if (events & EVENT_DASH) { playDash(); }
+    }
   }
 
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
+    const dt = (now - last) / 1000;
     last = now;
+
+    accumulator += Math.min(dt, MAX_FRAME);
+    if (accumulator > 1.0) accumulator = 0; // Spiral guard
+
     handleActions();
+
     if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
+      while (accumulator >= STEP) {
         step();
         accumulator -= STEP;
       }
     } else {
       accumulator = 0;
     }
+
     renderer.draw(world.state, screen, best);
   }
 
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && screen === SCREEN_PLAY) {
       screen = SCREEN_PAUSED;
-      announce('Paused.');
+      setThrust(false);
+      announce('Paused due to tab visibility.');
+    } else if (!document.hidden) {
+      last = performance.now();
+      accumulator = 0;
     }
   });
 
-  announce('Block Dodger. Press Space or click to start.');
+  announce('STARWAKE — Comet Courier. Press Space or Click to Start.');
   requestAnimationFrame(frame);
 }
 

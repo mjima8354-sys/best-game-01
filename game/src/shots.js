@@ -1,79 +1,68 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
+// Screenshot staging for ?shot=start|play|end with autopilot.
+
+import { FIELD, STEP } from './config.js';
+import { EVENT_OVER } from './world.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
+const START_SECONDS = 4;
+const PLAY_SECONDS = 18;
 const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
 const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
+function autopilot(state) {
   const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
+  // Find nearest shard or beacon if quota met
+  let target = null;
+  if (state.collected >= state.quota) {
+    target = state.beacon;
+  } else {
+    for (const item of state.items) {
+      if (item.active && item.kind === 'shard') {
+        if (!target || Math.hypot(item.x - player.x, item.y - player.y) < Math.hypot(target.x - player.x, target.y - player.y)) {
+          target = item;
+        }
+      }
+    }
+    if (!target) target = state.beacon;
+  }
+
+  const angleToTarget = Math.atan2(target.y - player.y, target.x - player.x);
+  const angleDiff = angleToTarget - player.angle;
+  // normalize angle diff
+  const normDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+
+  let turnLeft = normDiff < -0.1;
+  let turnRight = normDiff > 0.1;
+  let thrust = Math.abs(normDiff) < 0.8;
+  let brake = false;
+  let dash = false;
+
+  // Avoid gravity wells if too close
+  for (const well of state.wells) {
+    const dist = Math.hypot(well.x - player.x, well.y - player.y);
+    if (dist < well.radius + 60) {
+      thrust = false;
+      brake = true;
+      if (dist < well.radius + 20) dash = true;
     }
   }
-  return Infinity;
+
+  return { thrust, brake, turnLeft, turnRight, dash, mouse: { x: target.x, y: target.y, down: false } };
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
-}
-
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
 export function stageShot(name, world) {
   world.reset();
   if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
+    for (let i = 0; i < START_SECONDS / STEP; i++) world.step(STEP, { thrust: false, brake: false, turnLeft: false, turnRight: false, dash: false, mouse: { x: 0, y: 0, down: false } }, true);
     return { screen: SCREEN_TITLE, best: 0 };
   }
+
   const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  for (let i = 0; i < limit / STEP; i++) {
+    const controls = autopilot(world.state);
+    const events = world.step(STEP, controls, false);
+    if (events & EVENT_OVER) break;
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  const over = world.state.player.shields <= 0;
+  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.player.score };
 }
