@@ -1,3 +1,5 @@
+import { createRandom } from './random.js';
+const rng = createRandom(42);
 // Procedural WebAudio sound effects and master mute.
 
 let audioCtx = null;
@@ -100,7 +102,7 @@ export function playHit() {
   const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) {
-    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.08));
+    data[i] = (rng() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.08));
   }
   const noise = audioCtx.createBufferSource();
   noise.buffer = buffer;
@@ -132,6 +134,41 @@ export function playDash() {
   gain.connect(masterGain);
   osc.start(now);
   osc.stop(now + 0.2);
+}
+
+export function playComboUp() {
+  unlockAudio();
+  if (!audioCtx || muted) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(300, now);
+  osc.frequency.exponentialRampToValueAtTime(120, now + 0.1);
+  gain.gain.setValueAtTime(0.15, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start(now);
+  osc.stop(now + 0.1);
+}
+
+export function playWaveClear() {
+  unlockAudio();
+  if (!audioCtx || muted) return;
+  const now = audioCtx.currentTime;
+  [440, 554, 659].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now + i * 0.07);
+    gain.gain.setValueAtTime(0.12, now + i * 0.07);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.2);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(now + i * 0.07);
+    osc.stop(now + i * 0.07 + 0.2);
+  });
 }
 
 export function setThrust(active) {

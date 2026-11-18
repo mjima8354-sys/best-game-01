@@ -1,6 +1,8 @@
 // Drawing module for STARWAKE — Comet Courier: starfield, gravity wells, ship, asteroids, shards, beacon, HUD, and panels.
 
-import { FIELD, FONT, PALETTE, PLAYER } from './config.js';
+import { FIELD, FONT, PALETTE, PLAYER } from "./config.js";
+import { createEffects } from "./effects.js";
+import { createRandom } from "./random.js";
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -14,6 +16,7 @@ const PANEL = { width: 640, top: 120, line: 36, bottom: 60 };
 export function createRenderer(canvas) {
   const context = canvas.getContext('2d');
   const view = { scale: 1, x: 0, y: 0 };
+  const effects = createEffects(createRandom(20261118));
 
   // Pre-generate background stars for determinism/performance
   const stars = [];
@@ -99,6 +102,7 @@ export function createRenderer(canvas) {
   }
 
   function drawEntities(state) {
+    effects.drawBackground(context, state); effects.drawShipTrail(context, state);
     const items = state.items;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -154,6 +158,7 @@ export function createRenderer(canvas) {
       context.stroke();
       context.restore();
     }
+    effects.drawPickupPops(context);
   }
 
   function drawHud(state) {
@@ -205,10 +210,7 @@ export function createRenderer(canvas) {
 
     context.setTransform(view.scale, 0, 0, view.scale, view.x, view.y);
 
-    if (state.screenShake > 0) {
-      const shake = state.screenShake * 12;
-      context.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
-    }
+    const so = effects.shakeOffset(); effects.update(1 / 60, state); if (so.x || so.y) { context.translate(so.x, so.y); }
 
     drawBackground(state);
     drawEntities(state);
