@@ -69,13 +69,13 @@ let lastScore = 0;
     ctx.globalCompositeOperation = "lighter";
     stars.forEach(s => {
       const size = (1 - s.z) * 2;
-      ctx.fillStyle = `rgba(255,255,255,${s.c})`;
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(s.c + 0.15,1)})`;
       ctx.fillRect(s.x - size, s.y - size, size * 2, size * 2);
     });
     nebula.forEach(n => {
       const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
-      grad.addColorStop(0, `rgba(255,200,150,${n.c1})`);
-      grad.addColorStop(1, `rgba(0,0,0,${n.c2})`);
+      grad.addColorStop(0, `rgba(255,200,150,${n.c1 * 0.45})`);
+      grad.addColorStop(1, `rgba(0,0,0,${n.c2 * 0.45})`);
       ctx.fillStyle = grad;
       ctx.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
     });

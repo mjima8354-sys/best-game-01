@@ -123,8 +123,10 @@ export function createRenderer(canvas) {
         context.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
         context.fill();
         context.stroke();
-      }
+    
     }
+   }
+
 
     // Player ship
     const player = state.player;
@@ -171,11 +173,12 @@ export function createRenderer(canvas) {
     const shieldX = 24;
     const shieldY = 60;
     text('Shields:', shieldX, shieldY, 18, '#8a99b5', 'left');
-    for (let i = 0; i < PLAYER.maxShields; i++) {
-      context.fillStyle = i < state.player.shields ? '#00f0ff' : '#28324c';
-      context.fillRect(shieldX + 80 + i * 28, shieldY + 2, 22, 14);
+      for (let i = 0; i < PLAYER.maxShields; i++) {
+        context.fillStyle = i < state.player.shields ? '#00f0ff' : '#28324c';
+        context.fillRect(shieldX + 80 + i * 28, shieldY + 2, 22, 14);
+      }
+      text(`Dash: ${state.player.dashCooldown <= 0 ? 'ready' : 'cooling down'}`, shieldX, shieldY + 28, 14, '#9fb3c8', 'left');
     }
-  }
 
   function drawPanel(title, lines, prompt) {
     const height = PANEL.top + lines.length * PANEL.line + PANEL.bottom;
